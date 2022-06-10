@@ -12,9 +12,9 @@ Example:
 ''')
 
 parser.add_argument('videofn', type=str, help='Video filename',nargs='+')
-parser.add_argument('--suffix', dest='suffix', type=str, help='For output videos the suffix to use',default='track')
+parser.add_argument('--suffix', dest='suffix', type=str, help='For output videos the suffix to use. Default: track.',default='track')
 parser.add_argument('-r', dest='render', action='store_true', help='Whether to output to a video file.',default=False)
-parser.add_argument('--recordfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance) tuple',default='summarywalkdist.csv')
+parser.add_argument('--recordfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance) tuple. Default: summarywalkdist.csv',default='summarywalkdist.csv')
 parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
 
 args = parser.parse_args()
@@ -24,11 +24,6 @@ filelist = args.videofn
 if len(filelist)==1:
     filelist = glob(filelist[0]) #in windows this isn't expanded, so trying to here. 
 
-print(filelist)
-print(args.suffix)
-print(args.render)
-print(args.recordfile)
-print(args.store)
 for fn in filelist:
     print("Processing %s" % fn)
     newfn = fn.split('.')
