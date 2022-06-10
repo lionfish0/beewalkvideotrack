@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+
+import argparse
+from glob import glob
+from beewalkvideotrack import BeeTrack
+
+parser = argparse.ArgumentParser(description='''Find route bee walks in video(s). \n
+Example: 
+
+    beetrack data/*.mp4
+
+''')
+
+parser.add_argument('videofn', type=str, help='Video filename',nargs='+')
+parser.add_argument('--suffix', dest='suffix', type=str, help='For output videos the suffix to use',default='track')
+parser.add_argument('-r', dest='render', action='store_true', help='Whether to output to a video file.',default=False)
+parser.add_argument('--recordfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance) tuple',default='summarywalkdist.csv')
+parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
+
+args = parser.parse_args()
+
+filelist = args.videofn
+
+if len(filelist)==1:
+    filelist = glob(filelist[0]) #in windows this isn't expanded, so trying to here. 
+
+print(filelist)
+print(args.suffix)
+print(args.render)
+print(args.recordfile)
+print(args.store)
+for fn in filelist:
+    print("Processing %s" % fn)
+    newfn = fn.split('.')
+    rootfn = ".".join(newfn[:-1])
+    newfn = "%s_%s.%s" % (rootfn,args.suffix,newfn[-1])
+    print(newfn)
+    print("  Loading")
+    bt = BeeTrack(fn)
+    print("  Finding path")
+    bt.getpath()
+    bt.compute_features()
+    if args.render:
+        print("  Rendering to %s" % newfn)
+        bt.makemovie(newfn)
+    if args.store:
+        with open(args.recordfile, 'a') as file:
+            file.write('%s,%0.1f\n' % (fn,bt.totalwalkdist))
