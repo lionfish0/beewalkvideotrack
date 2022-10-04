@@ -22,11 +22,13 @@ class BeeTrack():
             
         self.allframes = np.array(allframes)
         
-        #normalise to mean of 15 and std of 9.
-        self.meancorr = np.mean(self.allframes)-15
-        self.stdcorr = np.std(self.allframes)/9
-        self.allframes-=self.meancorr
+        #normalise to mean of 80#15 and std of 27#9
+
+        self.stdcorr = np.std(self.allframes)/27
         self.allframes/=self.stdcorr
+        self.meancorr = np.mean(self.allframes)-80        
+        self.allframes-=self.meancorr
+        
     
     def particlefilter(self,frames,Nsamp = 10000,movescale=20,lookback=10,lookbackB=3):
         sh = frames[0].shape
@@ -41,10 +43,10 @@ class BeeTrack():
             diff_forward = (frames[i]-frames[i+lookback])
             
             idx = x.astype(int)
-            logp = -13-diff[(idx[:,0],idx[:,1])]/12 #6
+            logp = -13-diff[(idx[:,0],idx[:,1])]/36 #6
             
-            logp += -26-diff_backB[(idx[:,0],idx[:,1])]/6 #6
-            logp += -13-diff_forward[(idx[:,0],idx[:,1])]/12 #6
+            logp += -26-diff_backB[(idx[:,0],idx[:,1])]/18 #6
+            logp += -13-diff_forward[(idx[:,0],idx[:,1])]/36 #6
             
 
             #a = np.linspace(0,np.pi*2,10,endpoint=False)
@@ -103,12 +105,12 @@ class BeeTrack():
         path = self.moving_avg_path(self.meanpath)
         self.smoothpath = path
         speed = np.sum((np.diff(path,axis=0))**2,1)**.5
-        speed = self.moving_average(speed,5)*self.downsample #we convert to original image size
+        speed = self.moving_average(speed,15)*self.downsample #we convert to original image size
         self.speed = speed
         self.walk = np.full(len(speed),np.NaN)
         keep = (self.stdpath<self.thresholdfordetection)[:-1]
-        self.walk[keep & (self.speed<20)] = True
-        self.walk[keep & (self.speed>30)] = False
+        self.walk[keep & (self.speed<15)] = True
+        self.walk[keep & (self.speed>25)] = False
         s = self.speed
         s[self.walk!=True]=False
         self.dist = np.cumsum(s)
@@ -157,10 +159,11 @@ class BeeTrack():
             plt.figure(figsize=[20,10])
             self.plotframe(i,clim,drawparticles,ax)
 
-    def grabhighres(self,box=100,downsample=1,skip=1):
+    def grabhighres(self,box=100,downsample=1,skip=1,runfn=None):
         self.highresdownsample = downsample
         cap = cv2.VideoCapture(self.videofilename)
         self.highresframes = []
+        self.runresults = []
         self.highresframeindices = []
         print("Loading frames")
         #framecache = []
@@ -180,11 +183,15 @@ class BeeTrack():
 
                 img = temp#-framecache[0]
                 frame = img[pos[0]-box:pos[0]+box:downsample,pos[1]-box:pos[1]+box:downsample]
-                frame-=self.meancorr
                 frame/=self.stdcorr
+                frame-=self.meancorr
+                
             else:
                 frame = None
-            self.highresframes.append(frame)
+            if runfn is not None:
+                self.runresults.append(runfn(frame))
+            else:
+                self.highresframes.append(frame)
             self.highresframeindices.append([fileidx,i])
             i+=1
             
