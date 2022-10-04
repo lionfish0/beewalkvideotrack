@@ -14,8 +14,10 @@ Example:
 parser.add_argument('videofn', type=str, help='Video filename',nargs='+')
 parser.add_argument('--suffix', dest='suffix', type=str, help='For output videos the suffix to use. Default: track.',default='track')
 parser.add_argument('-r', dest='render', action='store_true', help='Whether to output to a video file.',default=False)
-parser.add_argument('--recordfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance) tuple. Default: summarywalkdist.csv',default='summarywalkdist.csv')
-parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
+parser.add_argument('--segmentfile',dest='segmentfile', help='Whether to create a segmentation CSV file (default True)',default=True)
+parser.add_argument('--mmperpixel',dest='mmperpixel', type=float, help='Resolution of image (mm per pixel)',default=None)
+#parser.add_argument('--recordfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance) tuple. Default: summarywalkdist.csv',default='summarywalkdist.csv')
+#parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
 
 args = parser.parse_args()
 
@@ -29,15 +31,21 @@ for fn in filelist:
     newfn = fn.split('.')
     rootfn = ".".join(newfn[:-1])
     newfn = "%s_%s.%s" % (rootfn,args.suffix,newfn[-1])
+    segcsvfn = fn.split('.')
+    rootfn = ".".join(segcsvfn[:-1])
+    segcsvfn = "%s.csv" % (rootfn)
     print(newfn)
     print("  Loading")
-    bt = BeeTrack(fn)
+    bt = BeeTrack(fn,mmperpixel=args.mmperpixel)
     print("  Finding path")
     bt.getpath()
     bt.compute_features()
     if args.render:
         print("  Rendering to %s" % newfn)
         bt.makemovie(newfn)
-    if args.store:
-        with open(args.recordfile, 'a') as file:
-            file.write('%s,%0.1f\n' % (fn,bt.totalwalkdist))
+    #if args.store:
+    #    with open(args.recordfile, 'a') as file:
+    #        file.write('%s,%0.1f\n' % (fn,bt.totalwalkdist))
+    if args.segmentfile:
+        print("  Writing walk segment data to %s" % segcsvfn)
+        bt.walksegments.to_csv(segcsvfn)

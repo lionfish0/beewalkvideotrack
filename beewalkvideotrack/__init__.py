@@ -1,13 +1,16 @@
 import cv2
 import numpy as np
+import pandas as pd
 
 class BeeTrack():
-    def __init__(self,videofilename,fromframe=0,toframe=1000000000,downsample=10,thresholdfordetection=4.9):
+    def __init__(self,videofilename,fromframe=0,toframe=1000000000,downsample=10,thresholdfordetection=4.9,mmperpixel=None):
         self.videofilename = videofilename
+        self.mmperpixel = mmperpixel
         self.fromframe = fromframe
         self.toframe = toframe
         self.downsample = downsample
         cap = cv2.VideoCapture(videofilename)
+        self.framerate = cap.get(cv2.CAP_PROP_FPS)
         self.thresholdfordetection = thresholdfordetection
         
         allframes = []
@@ -104,7 +107,7 @@ class BeeTrack():
     def compute_features(self):
         path = self.moving_avg_path(self.meanpath)
         self.smoothpath = path
-        speed = np.sum((np.diff(path,axis=0))**2,1)**.5
+        speed = np.sum((np.diff(path,axis=0))**2,1)**.5 #pixels per frame
         speed = self.moving_average(speed,15)*self.downsample #we convert to original image size
         self.speed = speed
         self.walk = np.full(len(speed),np.NaN)
@@ -115,6 +118,24 @@ class BeeTrack():
         s[self.walk!=True]=False
         self.dist = np.cumsum(s)
         self.totalwalkdist = np.sum(s)
+        
+        #Compute segments walked
+        walk = self.walk.copy()
+        walk[-1]=np.NaN #ensures the walk stops at the end
+        walkstarts = (walk[:-1]!=1) & (walk[1:]==1)
+        walkstarts = np.where(walkstarts)[0]
+        walkstops = (walk[:-1]==1) & (walk[1:]!=1)
+        walkstops = np.where(walkstops)[0]
+
+        walksegments = []
+        for start,end in zip(walkstarts,walkstops):
+            distwalked = np.sum(self.speed[start:end]) #in pixels
+            if self.mmperpixel is None:
+                mmdistwalked = None
+            else:
+                mmdistwalked = distwalked * self.mmperpixel #in mm
+            walksegments.append([start,end,start/self.framerate,end/self.framerate,self.videofilename,distwalked,mmdistwalked])
+        self.walksegments = pd.DataFrame(walksegments,columns = ['start (frame)','end (frame)','start (s)','end (s)','filename','distance (pixels)','distance (mm)'])
         
     def plotframe(self,i,clim=None,drawparticles=False,ax=None):
         import matplotlib.pyplot as plt
