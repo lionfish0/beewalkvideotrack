@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 import pandas as pd
 
+#note about Katy's data. 10 tiles [40mm] = 357 pixels across, 13 pixels down. Each tile is 4mm across. So sqrt(357^2+13^2)=357.24=357..
+#40 / 357 = 0.11205 mmperpixel
+
 class BeeTrack():
     def __init__(self,videofilename,fromframe=0,toframe=1000000000,downsample=10,thresholdfordetection=4.9,mmperpixel=None):
         self.videofilename = videofilename
@@ -33,7 +36,7 @@ class BeeTrack():
         self.allframes-=self.meancorr
         
     
-    def particlefilter(self,frames,Nsamp = 10000,movescale=20,lookback=10,lookbackB=3):
+    def particlefilter(self,frames,Nsamp = 50000,movescale=20,lookback=10,lookbackB=3):
         sh = frames[0].shape
         x = np.random.rand(Nsamp,2)*np.array(sh)
         path = []
@@ -118,6 +121,10 @@ class BeeTrack():
         s[self.walk!=True]=False
         self.dist = np.cumsum(s)
         self.totalwalkdist = np.sum(s)
+        if self.mmperpixel is None:
+            self.totalwalkdistmm = None
+        else:
+            self.totalwalkdistmm = self.totalwalkdist*self.mmperpixel
         
         #Compute segments walked
         walk = self.walk.copy()
@@ -126,9 +133,8 @@ class BeeTrack():
         walkstarts = np.where(walkstarts)[0]
         walkstops = (walk[:-1]==1) & (walk[1:]!=1)
         walkstops = np.where(walkstops)[0]
-
         walksegments = []
-        for start,end in zip(walkstarts,walkstops):
+        for start,end in zip(walkstarts+1,walkstops+1):
             distwalked = np.sum(self.speed[start:end]) #in pixels
             if self.mmperpixel is None:
                 mmdistwalked = None
@@ -241,7 +247,7 @@ class BeeTrack():
             self.plotframe(int(t*25),clim=clim,drawparticles=drawparticles,ax=ax)    
             return mplfig_to_npimage(fig)
 
-        animation = VideoClip(make_frame, duration = (len(self.allframes)-1)/25)
+        animation = VideoClip(make_frame, duration = (len(self.allframes)-2)/25)
 
         #animation.ipython_display(fps = 25, loop = False, autoplay = True)
         animation.write_videofile(filename,fps=25)

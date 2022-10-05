@@ -3,7 +3,7 @@
 import argparse
 from glob import glob
 from beewalkvideotrack import BeeTrack
-
+import os
 parser = argparse.ArgumentParser(description='''Find route bee walks in video(s). \n
 Example: 
 
@@ -16,8 +16,8 @@ parser.add_argument('--suffix', dest='suffix', type=str, help='For output videos
 parser.add_argument('-r', dest='render', action='store_true', help='Whether to output to a video file.',default=False)
 parser.add_argument('--segmentfile',dest='segmentfile', help='Whether to create a segmentation CSV file (default True)',default=True)
 parser.add_argument('--mmperpixel',dest='mmperpixel', type=float, help='Resolution of image (mm per pixel)',default=None)
-#parser.add_argument('--recordfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance) tuple. Default: summarywalkdist.csv',default='summarywalkdist.csv')
-#parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
+parser.add_argument('--combinedfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance,distancemm) tuple. Default: summarywalkdist.csv',default='summarywalkdist.csv')
+parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
 
 args = parser.parse_args()
 
@@ -43,9 +43,13 @@ for fn in filelist:
     if args.render:
         print("  Rendering to %s" % newfn)
         bt.makemovie(newfn)
-    #if args.store:
-    #    with open(args.recordfile, 'a') as file:
-    #        file.write('%s,%0.1f\n' % (fn,bt.totalwalkdist))
+    if args.store:
+        exists = os.path.exists(args.recordfile)
+        with open(args.recordfile, 'a') as file:
+            if not exists:
+                print("Creating combined recording file: %s" % args.recordfile)
+                file.write('filename,distance (pixels),distance (mm)\n')
+            file.write('%s,%0.1f,%0.1f\n' % (fn,bt.totalwalkdist,bt.totalwalkdistmm))
     if args.segmentfile:
         print("  Writing walk segment data to %s" % segcsvfn)
         bt.walksegments.to_csv(segcsvfn)
