@@ -13,13 +13,37 @@ Example:
 
 parser.add_argument('videofn', type=str, help='Video filename',nargs='+')
 parser.add_argument('--suffix', dest='suffix', type=str, help='For output videos the suffix to use. Default: track.',default='track')
+parser.add_argument('--box', dest='box', type=str, help='Bounding box x1,y1,x2,y2, e.g. 1,2,3,4',default=None)
+parser.add_argument('--smoothtime', dest='smoothtime', type=int, help='Whether to smooth over time',default=None)
+parser.add_argument('--blur', dest='blur', type=float, help='Whether to smooth over space',default=None)
+parser.add_argument('--frames', dest='frames', type=str, help='Start and end frame, start,end, e.g. 100,200',default=None)
 parser.add_argument('-r', dest='render', action='store_true', help='Whether to output to a video file.',default=False)
 parser.add_argument('--segmentfile',dest='segmentfile', help='Whether to create a segmentation CSV file (default True)',default=True)
-parser.add_argument('--mmperpixel',dest='mmperpixel', type=float, help='Resolution of image (mm per pixel)',default=None)
+parser.add_argument('--mmperpixel',dest='mmperpixel', type=float, help='Resolution of image (mm per pixel). If not included, tries to estimate from a convolution with the patch of squares.',default=None)
 parser.add_argument('--combinedfile', dest='recordfile', type=str, help='CSV file to append with (filename,distance,distancemm) tuple. Default: summarywalkdist.csv',default='summarywalkdist.csv')
 parser.add_argument('-s', dest='store', action='store_true', help='Whether to append distance walked to record file.',default=False)
+parser.add_argument('-f', dest='force_replace', action='store_true', help='Whether to force a refresh of files already computed (default false, currently checks if the segmentation file exists)',default=False)
+parser.add_argument('-a', dest='force_all', help='Whether to include files with "track" in their name (default false)',default=False)
+
 
 args = parser.parse_args()
+
+if args.box is not None:
+    box = [int(x) for x in args.box.split(',')]
+    assert len(box)==4
+    print("Using box: ",box)
+else:
+    box = None
+
+if args.frames is not None:
+    frames = [int(x) for x in args.frames.split(',')]
+    assert len(frames)==2
+    fromframe = frames[0]
+    toframe = frames[1]
+    print("Using frames %d to %d" % (fromframe,toframe))
+else:
+    fromframe=0
+    toframe=None
 
 filelist = args.videofn
 
@@ -28,28 +52,53 @@ if len(filelist)==1:
 
 for fn in filelist:
     print("Processing %s" % fn)
-    newfn = fn.split('.')
-    rootfn = ".".join(newfn[:-1])
-    newfn = "%s_%s.%s" % (rootfn,args.suffix,newfn[-1])
+    if not args.force_all:
+        if "track" in fn:
+            print("Skipping file with 'track' in title (as this is probably an output. To include these, add the '-a' option")
+            continue
+    
     segcsvfn = fn.split('.')
     rootfn = ".".join(segcsvfn[:-1])
     segcsvfn = "%s.csv" % (rootfn)
-    print(newfn)
+    if os.path.isfile(segcsvfn):
+        if not args.force_replace:
+            print("Found %s, skipping processing this video (use -f to force recomputing)" % segcsvfn)
+            continue
+    #print(newfn)
     print("  Loading")
-    bt = BeeTrack(fn,mmperpixel=args.mmperpixel)
-    print("  Finding path")
-    bt.getpath()
-    bt.compute_features()
-    if args.render:
-        print("  Rendering to %s" % newfn)
-        bt.makemovie(newfn)
+    frame_number = fromframe
+    part = 0
+    totalwalkdist = 0
+    totalwalkdistmm = 0
+    while frame_number is not None:
+        bt = BeeTrack(fn,mmperpixel=args.mmperpixel,fromframe=frame_number,toframe=toframe,boundingbox=box,smoothtime=args.smoothtime,blur=args.blur)
+        frame_number = bt.frame_number
+        part += 1        
+        if frame_number is not None:
+            print("Video file analysis is being split (part = %d)" % part)
+        print("  Finding path")
+        mean,std = bt.getpath()
+        if mean is None: continue
+        bt.compute_features()
+        newfn = fn.split('.')
+        rootfn = ".".join(newfn[:-1])
+        partnewfn = "%s_%s_%d.%s" % (rootfn,args.suffix,part,newfn[-1])
+        if args.render:
+            print("  Rendering to %s" % partnewfn)
+            bt.makemovie(partnewfn)
+
+        if args.segmentfile:
+            print("  Writing walk segment data to %s" % segcsvfn)
+            bt.walksegments.to_csv(segcsvfn, mode='a', header=not os.path.exists(segcsvfn))
+            
+        totalwalkdist += bt.totalwalkdist
+        totalwalkdistmm += bt.totalwalkdistmm
     if args.store:
         exists = os.path.exists(args.recordfile)
         with open(args.recordfile, 'a') as file:
             if not exists:
+                mmperpixel = -1
+                if bt.mmperpixel is not None: mmperpixel = bt.mmperpixel
                 print("Creating combined recording file: %s" % args.recordfile)
-                file.write('filename,distance (pixels),distance (mm)\n')
-            file.write('%s,%0.1f,%0.1f\n' % (fn,bt.totalwalkdist,bt.totalwalkdistmm))
-    if args.segmentfile:
-        print("  Writing walk segment data to %s" % segcsvfn)
-        bt.walksegments.to_csv(segcsvfn)
+                file.write('filename,distance (pixels),distance (mm), mm per pixel, mean_val, std_val\n')
+            file.write('%s,%0.1f,%0.1f,%0.4f,%0.4f,%0.4f\n' % (fn,totalwalkdist,totalwalkdistmm,bt.mmperpixel,bt.rawmeanval,bt.rawstdval))            
